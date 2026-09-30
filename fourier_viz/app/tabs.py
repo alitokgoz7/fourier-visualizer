@@ -261,6 +261,10 @@ def _drawing_input(palette: Palette) -> FloatArray | None:
         )
         if len(pts) >= 3:
             st.session_state["drawn_points"] = pts
+            # Tuvali sıfırla: Plotly'nin kesik çizgili seçim çerçevesi yerine yakalanan yol
+            # temiz bir çizgi olarak gösterilsin (yeni anahtarlı grafikte seçim boştur).
+            st.session_state["canvas_version"] = version + 1
+            st.rerun()
 
     def clear() -> None:
         st.session_state.pop("drawn_points", None)

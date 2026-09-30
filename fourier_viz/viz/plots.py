@@ -38,7 +38,7 @@ def _base_layout(fig: go.Figure, *, title: str | None = None, height: int = 420)
     fig.update_layout(
         title={"text": title, "x": 0.0, "xanchor": "left"} if title else None,
         height=height,
-        margin={"l": 56, "r": 24, "t": 64 if title else 40, "b": 48},
+        margin={"l": 56, "r": 24, "t": 84 if title else 60, "b": 48},
         font={"family": FONT_FAMILY},
         legend={
             "orientation": "h",
