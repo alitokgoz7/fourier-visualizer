@@ -200,20 +200,20 @@ def convergence_animation_figure(
     fig.update_yaxes(range=[lo - pad, hi + pad])
     fig.update_xaxes(title_text="t")
     fig.update_layout(
-        margin={"b": 110},
+        margin={"b": 130},
         updatemenus=[_play_buttons(frame_duration)],
         sliders=[_frame_slider([str(n) for n in n_values], "N = ", frame_duration)],
     )
     return fig
 
 
-def _play_buttons(frame_duration: int, *, redraw: bool = False) -> dict[str, Any]:
+def _play_buttons(frame_duration: int, *, y: float = -0.2, redraw: bool = False) -> dict[str, Any]:
     return {
         "type": "buttons",
         "direction": "left",
         "showactive": False,
         "x": 0.0,
-        "y": -0.12,
+        "y": y,
         "xanchor": "left",
         "yanchor": "top",
         "pad": {"r": 8, "t": 8},
@@ -243,18 +243,32 @@ def _play_buttons(frame_duration: int, *, redraw: bool = False) -> dict[str, Any
     }
 
 
-def _frame_slider(names: Sequence[str], prefix: str, frame_duration: int) -> dict[str, Any]:
+def _frame_slider(
+    names: Sequence[str],
+    prefix: str,
+    frame_duration: int,
+    *,
+    y: float = -0.2,
+    show_labels: bool = True,
+) -> dict[str, Any]:
     return {
         "active": 0,
-        "x": 0.18,
-        "len": 0.82,
-        "y": -0.1,
+        "x": 0.2,
+        "len": 0.8,
+        "y": y,
         "yanchor": "top",
         "pad": {"t": 8},
-        "currentvalue": {"prefix": prefix, "visible": True},
+        "ticklen": 4 if show_labels else 0,
+        "minorticklen": 2 if show_labels else 0,
+        "currentvalue": {
+            "prefix": prefix,
+            "visible": show_labels,
+            "xanchor": "right",
+            "font": {"size": 12},
+        },
         "steps": [
             {
-                "label": name,
+                "label": name if show_labels else "",
                 "method": "animate",
                 "args": [
                     [name],
@@ -366,8 +380,14 @@ def error_figure(
     log_log: bool = True,
     y_label: str = "Hata",
     height: int = 420,
+    highlight_n: float | None = None,
+    highlight_label: str | None = None,
 ) -> go.Figure:
-    """N'e göre hata eğrileri (varsayılan log-log). Seriler sabit renk sırasıyla çizilir."""
+    """N'e göre hata eğrileri (varsayılan log-log). Seriler sabit renk sırasıyla çizilir.
+
+    ``highlight_n`` verilirse o N'de ince dikey bir referans çizgisi ve etiket eklenir. (Plotly'de
+    log eksende şekiller veri biriminde, açıklamalar ise log10 biriminde konumlandırılır.)
+    """
     n_arr = np.asarray(n_values, dtype=np.float64)
     fig = go.Figure()
     for slot, (name, values) in enumerate(series.items()):
@@ -391,9 +411,68 @@ def error_figure(
         )
     _base_layout(fig, title=title, height=height)
     axis_type = "log" if log_log else "linear"
-    fig.update_xaxes(title_text="Terim sayısı N", type=axis_type)
-    fig.update_yaxes(title_text=y_label, type=axis_type, exponentformat="power")
+    log_ticks = {"dtick": "D2"} if log_log else {}  # log eksende yalnızca 1-2-5 etiketleri
+    fig.update_xaxes(title_text="Terim sayısı N", type=axis_type, **log_ticks)
+    fig.update_yaxes(title_text=y_label, type=axis_type, exponentformat="power", **log_ticks)
     fig.update_layout(hovermode="x unified")
+    if highlight_n is not None and highlight_n > 0:
+        fig.add_shape(
+            type="line", xref="x", yref="paper", x0=highlight_n, x1=highlight_n, y0=0, y1=1,
+            line={"color": palette.muted, "width": 1},
+        )  # fmt: skip
+        fig.add_annotation(
+            x=float(np.log10(highlight_n)) if log_log else float(highlight_n),
+            xref="x", y=1.0, yref="paper", xanchor="left", yanchor="top", showarrow=False,
+            text=highlight_label or f"N = {highlight_n:g}",
+            font={"color": palette.muted, "size": 11},
+        )  # fmt: skip
+    return fig
+
+
+def gibbs_trend_figure(
+    n_values: ArrayLike,
+    percents: ArrayLike,
+    theoretical_percent: float,
+    *,
+    palette: Palette = LIGHT,
+    title: str | None = None,
+    height: int = 360,
+) -> go.Figure:
+    """Ölçülen Gibbs aşımının (%) N'e göre değişimi ve teorik sınır çizgisi."""
+    fig = go.Figure(
+        go.Scatter(
+            x=np.asarray(n_values, dtype=np.float64),
+            y=np.asarray(percents, dtype=np.float64),
+            mode="lines+markers",
+            name="Ölçülen aşım",
+            line={"color": palette.color(0), "width": LINE_WIDTH},
+            marker={
+                "size": 8,
+                "color": palette.color(0),
+                "line": {"color": palette.surface, "width": 2},
+            },
+            hovertemplate="N=%{x}<br>aşım=%{y:.3f}%<extra></extra>",
+        )
+    )
+    fig.add_hline(
+        y=theoretical_percent,
+        line={"color": palette.muted, "width": 1},
+        annotation_text=f"teorik ≈ %{theoretical_percent:.2f}",
+        annotation_position="bottom right",
+        annotation_font={"color": palette.muted, "size": 11},
+    )
+    _base_layout(fig, title=title, height=height)
+    ticks = [float(n) for n in np.asarray(n_values, dtype=np.float64)]
+    shown = ticks if len(ticks) <= 8 else ticks[:: max(1, len(ticks) // 7)]
+    fig.update_xaxes(
+        title_text="Terim sayısı N",
+        type="log",
+        tickvals=shown,
+        ticktext=[f"{v:g}" for v in shown],
+        minor={"showgrid": False},
+    )
+    fig.update_yaxes(title_text="Aşım (sıçramanın %'si)")
+    fig.update_layout(showlegend=False, hovermode="closest")
     return fig
 
 
@@ -656,13 +735,12 @@ def epicycle_figure(
     fig.update_yaxes(range=extent[1], visible=False, showgrid=False, scaleanchor="x")
     fig.update_layout(
         hovermode=False,
-        margin={"l": 8, "r": 8, "b": 90},
-        updatemenus=[_play_buttons(frame_duration)],
+        margin={"l": 8, "r": 8, "b": 70},
+        updatemenus=[_play_buttons(frame_duration, y=-0.02)],
         sliders=[
-            {
-                **_frame_slider([str(k) for k in range(n_frames)], "kare ", frame_duration),
-                "currentvalue": {"visible": False},
-            }
+            _frame_slider(
+                [str(k) for k in range(n_frames)], "", frame_duration, y=-0.02, show_labels=False
+            )
         ],
     )
     return fig
@@ -671,17 +749,21 @@ def epicycle_figure(
 def _epicycle_extent(
     joints: np.ndarray, path: np.ndarray, target: np.ndarray, radii: FloatArray
 ) -> tuple[list[float], list[float]]:
+    """Tüm karelerde çizilen her şeyi (eklemler, iz, hedef, çemberler) kapsayan en dar kutu."""
     xs = [joints.real.ravel(), path.real]
     ys = [joints.imag.ravel(), path.imag]
     if target.size:
         xs.append(target[:, 0])
         ys.append(target[:, 1])
+    if radii.size:
+        centers = joints[:, : radii.size]
+        xs += [(centers.real - radii).ravel(), (centers.real + radii).ravel()]
+        ys += [(centers.imag - radii).ravel(), (centers.imag + radii).ravel()]
     x = np.concatenate(xs)
     y = np.concatenate(ys)
-    margin = float(radii[0]) if radii.size else 0.0
-    x_lo, x_hi = float(x.min()) - margin, float(x.max()) + margin
-    y_lo, y_hi = float(y.min()) - margin, float(y.max()) + margin
-    pad = 0.05 * max(x_hi - x_lo, y_hi - y_lo, 1e-9)
+    x_lo, x_hi = float(x.min()), float(x.max())
+    y_lo, y_hi = float(y.min()), float(y.max())
+    pad = 0.04 * max(x_hi - x_lo, y_hi - y_lo, 1e-9)
     return [x_lo - pad, x_hi + pad], [y_lo - pad, y_hi + pad]
 
 

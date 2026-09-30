@@ -1,0 +1,26 @@
+# Fourier Serisi Görselleştirici — tema ayarları.
+# Renkler, renk körlüğü açısından doğrulanmış palete göre seçildi
+# (bkz. fourier_viz/viz/theme.py). Kullanıcı açık/koyu tema arasında
+# Streamlit menüsünden geçiş yapabilir; iki tema da tanımlıdır.
+
+[server]
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+baseRadius = "0.6rem"
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+
+[theme.light]
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f1f0ec"
+textColor = "#0b0b0b"
+
+[theme.dark]
+primaryColor = "#3987e5"
+backgroundColor = "#1a1a19"
+secondaryBackgroundColor = "#262624"
+textColor = "#f4f4f2"
