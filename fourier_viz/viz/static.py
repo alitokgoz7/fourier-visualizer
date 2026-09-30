@@ -23,10 +23,16 @@ def new_figure(
     palette: Palette = LIGHT, size: tuple[float, float] = (8.0, 4.5), dpi: int = 110
 ) -> tuple[Figure, Axes]:
     """Palete göre biçimlendirilmiş tek eksenli bir figür oluşturur."""
-    fig = Figure(figsize=size, dpi=dpi, facecolor=palette.surface)
+    fig = Figure(figsize=size, dpi=dpi, facecolor=palette.surface, layout="constrained")
     ax = fig.add_subplot()
     style_axes(ax, palette)
     return fig, ax
+
+
+def set_figure_title(fig: Figure, title: str | None, palette: Palette = LIGHT) -> None:
+    """Başlığı figür düzeyinde sola hizalı yazar; eksen üstündeki lejantla çakışmaz."""
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontsize=12, color=palette.ink)
 
 
 def style_axes(ax: Axes, palette: Palette = LIGHT) -> None:
@@ -78,10 +84,8 @@ def signal_plot(
     if approximation is not None:
         ax.plot(t, approximation, color=palette.color(0), lw=2, label=f"$S_N(t)$, N = {n_terms}")
     ax.set_xlabel("t")
-    if title:
-        ax.set_title(title, loc="left", fontsize=12)
+    set_figure_title(fig, title, palette)
     place_legend(ax, palette)
-    fig.tight_layout()
     return fig
 
 
@@ -103,10 +107,8 @@ def comparison_plot(
     if x_range:
         ax.set_xlim(*x_range)
     ax.set_xlabel("t")
-    if title:
-        ax.set_title(title, loc="left", fontsize=12)
+    set_figure_title(fig, title, palette)
     place_legend(ax, palette)
-    fig.tight_layout()
     return fig
 
 
@@ -135,9 +137,7 @@ def spectrum_plot(
     )
     ax.set_xlabel("Harmonik n")
     ax.set_ylabel(y_label)
-    if title:
-        ax.set_title(title, loc="left", fontsize=12)
-    fig.tight_layout()
+    set_figure_title(fig, title, palette)
     return fig
 
 
@@ -160,10 +160,8 @@ def error_plot(
         )
     ax.set_xlabel("Terim sayısı N")
     ax.set_ylabel("Hata")
-    if title:
-        ax.set_title(title, loc="left", fontsize=12)
+    set_figure_title(fig, title, palette)
     place_legend(ax, palette)
-    fig.tight_layout()
     return fig
 
 
@@ -218,16 +216,14 @@ def epicycle_snapshot(
     trail_points: int = 2000,
 ) -> Figure:
     """Epicycle zincirinin ``s`` anındaki görüntüsü ve tam iz (galeri/PNG için)."""
-    fig = Figure(figsize=size, dpi=110, facecolor=palette.surface)
+    fig = Figure(figsize=size, dpi=110, facecolor=palette.surface, layout="constrained")
     ax = fig.add_subplot()
     ax.set_facecolor(palette.surface)
     trail = epicycles.evaluate(np.linspace(0.0, 1.0, trail_points + 1))
     draw_epicycles(
         ax, epicycles, s, trail, target=target, show_circles=show_circles, palette=palette
     )
-    if title:
-        ax.set_title(title, loc="left", fontsize=12, color=palette.ink)
-    fig.tight_layout()
+    set_figure_title(fig, title, palette)
     return fig
 
 
@@ -247,11 +243,83 @@ def harmonics_plot(
     for values, n, color in zip(rows, indices, colors, strict=True):
         ax.plot(t, values, color=color, lw=1.5, label=f"n = {n}")
     ax.set_xlabel("t")
-    if title:
-        ax.set_title(title, loc="left", fontsize=12)
+    set_figure_title(fig, title, palette)
     if len(indices) <= 8:
         place_legend(ax, palette)
-    fig.tight_layout()
+    return fig
+
+
+def signal_card(
+    t: ArrayLike,
+    original: ArrayLike,
+    sums: Mapping[str, ArrayLike],
+    harmonics: ArrayLike,
+    amplitude: ArrayLike,
+    *,
+    title: str,
+    subtitle: str | None = None,
+    palette: Palette = LIGHT,
+    size: tuple[float, float] = (9.0, 6.2),
+) -> Figure:
+    """Galeri kartı: üstte sinyal ve kısmi toplamlar, altta genlik spektrumu (iki ayrı panel)."""
+    fig = Figure(figsize=size, dpi=110, facecolor=palette.surface, layout="constrained")
+    top, bottom = fig.subplots(2, 1, height_ratios=[1.7, 1.0])
+    style_axes(top, palette)
+    style_axes(bottom, palette)
+    top.plot(t, original, color=palette.ink_secondary, lw=2, label="f(t) — özgün")
+    for slot, (name, values) in enumerate(sums.items()):
+        top.plot(t, values, color=palette.color(slot), lw=1.8, label=name)
+    top.set_xlabel("t")
+    set_figure_title(fig, title, palette)
+    if subtitle:
+        top.set_title(subtitle, loc="left", fontsize=9, color=palette.muted)
+    place_legend(top, palette)
+    n = np.asarray(harmonics, dtype=np.float64)
+    a = np.asarray(amplitude, dtype=np.float64)
+    bottom.vlines(n, 0.0, a, color=palette.color(0), lw=1.5)
+    bottom.scatter(n, a, s=30, color=palette.color(0), edgecolors=palette.surface,
+                   linewidths=1.5, zorder=3)  # fmt: skip
+    bottom.set_xlabel("Harmonik n")
+    bottom.set_ylabel("Genlik $A_n$")
+    return fig
+
+
+def epicycle_progression(
+    points: ArrayLike,
+    sets: Sequence[EpicycleSet],
+    *,
+    title: str | None = None,
+    s: float = 0.35,
+    palette: Palette = LIGHT,
+    panel_size: float = 3.6,
+    max_drawn_circles: int = 30,
+) -> Figure:
+    """Aynı şeklin artan çember sayılarıyla yeniden çizimi (yan yana paneller)."""
+    count = len(sets)
+    if count == 0:
+        raise ValueError("En az bir epicycle kümesi gereklidir.")
+    fig = Figure(
+        figsize=(panel_size * count, panel_size + 0.6),
+        dpi=110,
+        facecolor=palette.surface,
+        layout="constrained",
+    )
+    axes = np.atleast_1d(fig.subplots(1, count))
+    for ax, epi in zip(axes, sets, strict=True):
+        ax.set_facecolor(palette.surface)
+        trail = epi.evaluate(np.linspace(0.0, 1.0, 1501))
+        draw_epicycles(
+            ax, epi, s, trail, target=points, max_drawn_circles=max_drawn_circles, palette=palette
+        )
+        ax.set_title(
+            f"{epi.n_circles} çember · enerji %{100 * epi.energy_fraction():.2f}",
+            fontsize=10,
+            color=palette.ink_secondary,
+        )
+    # Panel yüksekliğini içeriğin en-boy oranına göre ayarla (geniş şekillerde boşluk kalmasın).
+    aspect = max(ax.dataLim.height / max(ax.dataLim.width, 1e-12) for ax in axes)
+    fig.set_size_inches(panel_size * count, panel_size * float(np.clip(aspect, 0.45, 1.25)) + 0.7)
+    set_figure_title(fig, title, palette)
     return fig
 
 

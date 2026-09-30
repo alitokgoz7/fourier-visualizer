@@ -199,7 +199,7 @@ def square(n: int = 4) -> FloatArray:
 
 
 def epitrochoid(
-    big_r: float = 3.0, small_r: float = 1.0, distance: float = 0.5, n: int = 2000
+    big_r: float = 5.0, small_r: float = 1.0, distance: float = 2.0, n: int = 2000
 ) -> FloatArray:
     r"""Epitrokoid: :math:`R` yarıçaplı çemberin dışında yuvarlanan :math:`r` yarıçaplı çemberdeki
     merkezden :math:`d` uzaklıktaki noktanın izi.
@@ -332,9 +332,9 @@ SHAPE_LIBRARY: Final[Mapping[str, ShapeInfo]] = MappingProxyType(
                 "Epitrokoid",
                 epitrochoid,
                 (
-                    ShapeParam("big_r", "Sabit çember R", 3, 1, 8, 1, integer=True),
+                    ShapeParam("big_r", "Sabit çember R", 5, 1, 8, 1, integer=True),
                     ShapeParam("small_r", "Yuvarlanan çember r", 1, 1, 5, 1, integer=True),
-                    ShapeParam("distance", "Kalem uzaklığı d", 0.5, 0.0, 3.0, 0.1),
+                    ShapeParam("distance", "Kalem uzaklığı d", 2.0, 0.0, 3.0, 0.1),
                 ),
             ),
             ShapeInfo("circle", "Çember", circle),

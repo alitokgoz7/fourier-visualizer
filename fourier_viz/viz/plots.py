@@ -729,7 +729,7 @@ def epicycle_figure(
         )
         for k in range(n_frames)
     ]
-    extent = _epicycle_extent(joints, geo["path"], target_pts, radii)
+    extent = epicycle_extent(joints, geo["path"], target_pts, radii)
     _base_layout(fig, title=title, height=height)
     fig.update_xaxes(range=extent[0], visible=False, showgrid=False)
     fig.update_yaxes(range=extent[1], visible=False, showgrid=False, scaleanchor="x")
@@ -746,7 +746,7 @@ def epicycle_figure(
     return fig
 
 
-def _epicycle_extent(
+def epicycle_extent(
     joints: np.ndarray, path: np.ndarray, target: np.ndarray, radii: FloatArray
 ) -> tuple[list[float], list[float]]:
     """Tüm karelerde çizilen her şeyi (eklemler, iz, hedef, çemberler) kapsayan en dar kutu."""

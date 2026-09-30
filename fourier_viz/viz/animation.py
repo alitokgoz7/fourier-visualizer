@@ -20,7 +20,7 @@ from matplotlib.figure import Figure
 from numpy.typing import ArrayLike
 
 from fourier_viz.core.complex_dft import EpicycleSet
-from fourier_viz.viz.plots import epicycle_frames
+from fourier_viz.viz.plots import epicycle_extent, epicycle_frames
 from fourier_viz.viz.static import draw_epicycles, place_legend, style_axes
 from fourier_viz.viz.theme import LIGHT, Palette
 
@@ -112,14 +112,12 @@ def epicycle_animation(
     dpi = 100
     fig = Figure(figsize=(size_px / dpi, size_px / dpi), dpi=dpi, facecolor=palette.surface)
     ax = fig.add_axes((0.02, 0.02, 0.96, 0.96))
-    everything = np.concatenate([geo["joints"].ravel(), geo["path"]])
-    if target is not None:
-        tp = np.asarray(target, dtype=np.float64)
-        everything = np.concatenate([everything, tp[:, 0] + 1j * tp[:, 1]])
-    margin = float(epicycles.radii[0]) if epicycles.n_circles else 0.0
-    lo_x, hi_x = everything.real.min() - margin, everything.real.max() + margin
-    lo_y, hi_y = everything.imag.min() - margin, everything.imag.max() + margin
-    half = 0.53 * max(hi_x - lo_x, hi_y - lo_y, 1e-9)
+    target_pts = np.asarray(target, dtype=np.float64) if target is not None else np.empty((0, 2))
+    drawn_radii = epicycles.radii[: geo["circle_count"]] if show_circles else epicycles.radii[:0]
+    (lo_x, hi_x), (lo_y, hi_y) = epicycle_extent(
+        geo["joints"], geo["path"], target_pts, drawn_radii
+    )
+    half = 0.5 * max(hi_x - lo_x, hi_y - lo_y, 1e-9)
     cx, cy = (lo_x + hi_x) / 2, (lo_y + hi_y) / 2
 
     def draw(k: int) -> list[Artist]:
