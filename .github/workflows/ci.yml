@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MPLBACKEND: Agg
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint:
+    name: Lint ve tip kontrolü
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bağımlılıkları kur
+        run: python -m pip install -e ".[dev]"
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format --check
+        run: ruff format --check .
+      - name: mypy (strict)
+        run: mypy
+
+  test:
+    name: Testler (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    env:
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bağımlılıkları kur
+        run: python -m pip install -e ".[dev]"
+      - name: pytest (kapsama raporuyla)
+        run: >-
+          pytest --cov=fourier_viz --cov-report=term-missing --cov-report=xml
+          --durations=10
+      - name: Çekirdek modüllerde kapsama ≥ %90
+        run: coverage report --include="fourier_viz/core/*" --fail-under=90
+      - name: Kapsama raporunu yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  gallery:
+    name: Galeri betiği (matematik sağlamaları)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bağımlılıkları kur
+        run: python -m pip install -e ".[dev]"
+      - name: Galeriyi geçici klasöre üret ve sağlamaları çalıştır
+        run: python scripts/generate_gallery.py --out "$RUNNER_TEMP/gallery" --no-animations --dpi 60

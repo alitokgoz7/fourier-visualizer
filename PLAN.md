@@ -156,4 +156,26 @@ docs/                       # matematik.md, mimari.md, gallery/
 
 ## 7. Durum
 
-- [ ] Adım 1–15 (commit geçmişine bakınız)
+- [x] 1. PLAN.md
+- [x] 2. Proje iskeleti (pyproject, ruff/mypy/pytest/coverage ayarları)
+- [x] 3. `core/integration.py` + testler
+- [x] 4. `core/series.py` + testler
+- [x] 5. `core/complex_dft.py` + testler
+- [x] 6. `core/expression.py` + güvenlik testleri
+- [x] 7. `core/signals.py` + testler (sonradan: ifadelerde otomatik sıçrama/tekillik tespiti)
+- [x] 8. `core/analysis.py` + testler
+- [x] 9. `core/paths.py` + `core/svg.py` + testler
+- [x] 10. Özellik tabanlı ve performans testleri
+- [x] 11. `viz/` (Plotly, Matplotlib, GIF/MP4) + `export.py` + testler
+- [x] 12. Streamlit arayüzü + AppTest duman testleri (tarayıcıda Playwright ile de denendi)
+- [x] 13. `scripts/generate_gallery.py`, görseller üretildi ve incelendi
+- [x] 14. README.md, docs/, GitHub Actions CI
+- [x] 15. Son kontrol ve PR
+
+### Plandan sapmalar
+
+* `export.py` (CSV/JSON) ayrı bir üst düzey modül oldu; `app/` modülü `common.py` ve
+  `sidebar.py` ile bölündü.
+* Epitrokoid varsayılanı, daha öğretici bir şekil için R=5, r=1, d=2 (beş ilmek) seçildi.
+* Kullanıcı ifadeleri için otomatik sıçrama ve tekillik tespiti eklendi (başta "bilinen
+  sınırlama" olarak düşünülmüştü).

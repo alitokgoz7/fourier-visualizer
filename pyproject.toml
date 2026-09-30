@@ -8,8 +8,7 @@ version = "0.1.0"
 description = "Eğitici ve interaktif Fourier serisi görselleştirici (Streamlit + Plotly)"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [{ name = "Ali Tokgöz" }]
+authors = [{ name = "alitokgoz7" }]
 keywords = ["fourier", "epicycles", "education", "streamlit", "signal-processing"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -23,7 +22,7 @@ dependencies = [
     "scipy>=1.11",
     "plotly>=5.20",
     "matplotlib>=3.8",
-    "streamlit>=1.50",
+    "streamlit>=1.64",  # durum tutan (lazy) st.tabs ve st.context.theme
     "pillow>=10.0",
     "imageio-ffmpeg>=0.4.9",
     "pandas>=2.0",
@@ -112,6 +111,7 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 90
 skip_covered = false
 exclude_also = [
     "if TYPE_CHECKING:",
