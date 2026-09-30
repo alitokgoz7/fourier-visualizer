@@ -534,6 +534,133 @@ def parabolic_wave(amplitude: float = 1.0, period: float = TWO_PI) -> PeriodicSi
 
 
 # ====================================================================== özel sinyaller
+MAX_DETECTED_JUMPS: Final[int] = 64
+""":func:`detect_jumps` ile aranacak en fazla aday sıçrama sayısı."""
+
+
+def _scalar(func: Callable[[FloatArray], FloatArray], x: float) -> float:
+    with np.errstate(all="ignore"):
+        return float(np.asarray(func(np.array([x], dtype=np.float64)), dtype=np.float64).ravel()[0])
+
+
+def _check_bounded(
+    func: Callable[[FloatArray], FloatArray],
+    lo: float,
+    hi: float,
+    magnitude: float,
+    zooms: int = 12,
+    points: int = 21,
+) -> None:
+    """``[lo, hi]`` içinde ``|f|``'nin en büyük olduğu yere 10'ar kat yakınlaşarak tekillik arar.
+
+    Kutup tipi tekilliklerde (``1/x``, ``1/x²``, ``tan``) değer her yakınlaşmada katlanarak büyür;
+    integre edilebilir logaritmik tekilliklerde (``log|x|``) ise yalnızca yavaşça artar.
+
+    Raises:
+        SignalError: Değer ızgara büyüklüğünün :math:`10^6` katını aşarsa veya tanımsızsa.
+    """
+    center, half = 0.5 * (lo + hi), 0.5 * (hi - lo)
+    peaks: list[float] = []
+    for _ in range(zooms):
+        xs = np.linspace(center - half, center + half, points)
+        with np.errstate(all="ignore"):
+            fx = np.abs(np.broadcast_to(np.asarray(func(xs), dtype=np.float64), xs.shape))
+        if not np.all(np.isfinite(fx)):
+            raise SignalError(
+                f"Fonksiyon t ≈ {xs[~np.isfinite(fx)][0]:.4g} noktasında tanımsız (NaN/sonsuz) "
+                "değer üretiyor (tekillik)."
+            )
+        j = int(np.argmax(fx))
+        center = float(xs[j])
+        peaks.append(float(fx[j]))
+        half /= 10.0
+    # Kutupta değer büyümeye devam eder; sonlu (ama dar ve yüksek) tepelerde doyuma ulaşır.
+    still_growing = peaks[-1] > 5.0 * peaks[max(0, len(peaks) - 4)]
+    if peaks[-1] > 1e6 * magnitude and still_growing:
+        raise SignalError(
+            f"Fonksiyon t ≈ {center:.4g} civarında sınırsız büyüyor (tekillik); bu sinyalin "
+            "Fourier katsayıları tanımlı değil. Tanım aralığını veya ifadeyi değiştirin."
+        )
+
+
+def detect_jumps(
+    func: Callable[[FloatArray], FloatArray],
+    t_start: float,
+    period: float,
+    samples: int = 8192,
+) -> tuple[float, ...]:
+    r"""Temel aralığın **içindeki** sıçrama (süreksizlik) noktalarını bulur.
+
+    Yöntem: aralık ``samples`` alt aralığa bölünüp ardışık değer farkları taranır; olağan
+    farkların çok üstündeki her aday aralık, farkın büyük kaldığı yarıya doğru ikiye bölünerek
+    :math:`\sim 10^{-13}T` genişliğe daraltılır. Gerçek bir sıçramada fark daralan aralıkta
+    **sabit kalır**; dik ama sürekli bölgelerde (ör. ``tanh(50*t)``) veya sonsuz eğimli
+    kırılmalarda (ör. ``cbrt(t)``) küçülür. Bu yüzden fark, iki farklı ölçekte
+    (:math:`10^{-10}T` ve :math:`10^{-13}T`) neredeyse aynıysa sıçrama kabul edilir.
+
+    Args:
+        func: Vektörleştirilmiş fonksiyon (temel aralıkta).
+        t_start: Temel aralığın başlangıcı :math:`t_0`.
+        period: Periyot :math:`T`.
+        samples: Tarama alt aralığı sayısı.
+
+    Returns:
+        :math:`(t_0, t_0 + T)` içinde artan sırada sıçrama konumları (en fazla
+        :data:`MAX_DETECTED_JUMPS`; uç noktalardaki periyodik sıçrama dahil değildir).
+
+    Raises:
+        SignalError: Fonksiyon bir noktada sınırsız büyüyorsa (integre edilemeyen tekillik,
+            ör. ``1/(t-1)``) veya tanımsız değer üretiyorsa.
+    """
+    T = validate_period(period)
+    t = np.linspace(t_start, t_start + T, int(samples) + 1)
+    with np.errstate(all="ignore"):
+        v = np.broadcast_to(np.asarray(func(t), dtype=np.float64), t.shape)
+    if not np.all(np.isfinite(v)):
+        bad = t[~np.isfinite(v)][0]
+        raise SignalError(
+            f"Fonksiyon t ≈ {bad:.4g} noktasında tanımsız (NaN/sonsuz) değer üretiyor."
+        )
+    diffs = np.abs(np.diff(v))
+    # Sağlam büyüklük ölçüsü: ızgara bir kutba tam denk gelse bile şişmeyen yüzdelik değer.
+    magnitude = max(1.0, float(np.percentile(np.abs(v), 99.5)))
+    scale = max(1.0, float(np.ptp(v)))
+    threshold = max(10.0 * float(np.median(diffs)), 1e-9 * scale)
+    candidates = np.nonzero(diffs > threshold)[0]
+    if candidates.size > MAX_DETECTED_JUMPS:
+        strongest = np.argsort(diffs[candidates])[::-1][:MAX_DETECTED_JUMPS]
+        candidates = candidates[strongest]
+    coarse_width = 1e-10 * max(1.0, T)
+    fine_width = 1e-13 * max(1.0, abs(t_start), abs(t_start + T), T)
+    found: list[float] = []
+    for i in sorted(int(c) for c in candidates):
+        _check_bounded(func, float(t[max(i - 1, 0)]), float(t[min(i + 2, t.size - 1)]), magnitude)
+        lo, hi, f_lo, f_hi = float(t[i]), float(t[i + 1]), float(v[i]), float(v[i + 1])
+        coarse_jump: float | None = None
+        while hi - lo > fine_width:
+            mid = 0.5 * (lo + hi)
+            if not lo < mid < hi:
+                break
+            f_mid = _scalar(func, mid)
+            if not np.isfinite(f_mid):
+                raise SignalError(
+                    f"Fonksiyon t ≈ {mid:.4g} noktasında tanımsız (NaN/sonsuz) değer üretiyor."
+                )
+            if abs(f_mid - f_lo) >= abs(f_hi - f_mid):
+                hi, f_hi = mid, f_mid
+            else:
+                lo, f_lo = mid, f_mid
+            if coarse_jump is None and hi - lo <= coarse_width:
+                coarse_jump = abs(f_hi - f_lo)
+        location = 0.5 * (lo + hi)
+        jump = abs(f_hi - f_lo)
+        is_jump = jump > 1e-6 * scale and (coarse_jump is None or jump >= 0.9 * coarse_jump)
+        near_edge = min(location - t_start, t_start + T - location) <= 1e-9 * T
+        if is_jump and not near_edge and (not found or location - found[-1] > 1e-9 * T):
+            found.append(location)
+    return tuple(found)
+
+
 def from_function(
     func: Callable[[FloatArray], FloatArray],
     period: float = TWO_PI,
@@ -547,8 +674,9 @@ def from_function(
     """Bir periyotta tanımlı fonksiyonu periyodik olarak genişletir.
 
     ``func`` yalnızca temel aralık :math:`[t_0, t_0 + T)` üzerinde çağrılır. Uçlardaki değerler
-    farklıysa (periyodik genişlemede sıçrama) :math:`t_0` noktası süreksizlik olarak eklenir
-    ve bu noktada ortalama değer döndürülür.
+    farklıysa (periyodik genişlemede sıçrama) :math:`t_0` noktası süreksizlik olarak eklenir.
+    Sınırdaki ve verilen iç süreksizlik noktalarında (Dirichlet sözleşmesi gereği) sol ve sağ
+    limitlerin ortalaması döndürülür.
     """
     T = validate_period(period)
     t0 = float(-T / 2.0 if t_start is None else t_start)
@@ -557,6 +685,12 @@ def from_function(
     left_end, right_end = float(ends[0]), float(ends[1])
     boundary_jump = bool(np.isfinite(ends).all() and not np.isclose(left_end, right_end))
     mid = 0.5 * (left_end + right_end)
+    eps = 1e-9 * T
+    interior_midpoints = [
+        (float(d), 0.5 * (_scalar(func, float(d) - eps) + _scalar(func, float(d) + eps)))
+        for d in discontinuities
+        if t0 < float(d) < t0 + T
+    ]
 
     def periodic(t: FloatArray) -> FloatArray:
         wrapped = wrap_to_period(t, T, t0)
@@ -564,6 +698,8 @@ def from_function(
         values = np.broadcast_to(values, wrapped.shape)
         if boundary_jump:
             values = np.where(_near(wrapped, t0), mid, values)
+        for location, average in interior_midpoints:
+            values = np.where(_near(wrapped, location), average, values)
         return values
 
     disc = tuple(discontinuities)
@@ -585,10 +721,13 @@ def from_expression(
 
     İfade temel aralık :math:`[t_0, t_0+T)` üzerinde tanımlıdır ve periyodik olarak genişletilir.
     Oluşturma sırasında aralık, ``validation_points`` noktalı (uçlar ve 0 dahil) bir ızgarada
-    değerlendirilerek NaN/sonsuz değer olmadığı doğrulanır.
+    değerlendirilerek NaN/sonsuz değer olmadığı doğrulanır; ardından :func:`detect_jumps` ile iç
+    sıçramalar bulunur (ör. ``where(t > 0, 1, -1)``, ``floor(t)``). Bulunan sıçramalar integralde
+    parça sınırı olur (hassasiyet) ve Gibbs analizi için kullanılır.
 
     Raises:
-        SignalError: İfade geçersizse veya tanımsız değer üretiyorsa (Türkçe açıklama ile).
+        SignalError: İfade geçersizse, tanımsız değer üretiyorsa veya integre edilemeyen bir
+            tekilliği varsa (Türkçe açıklama ile).
     """
     try:
         expr = parse_expression(text)
@@ -602,7 +741,10 @@ def from_expression(
         expr.evaluate(grid)
     except ExpressionError as exc:
         raise SignalError(str(exc)) from exc
-    signal = from_function(expr, T, t0, name="expression", label=f"f(t) = {expr.source}")
+    jumps = detect_jumps(expr, t0, T)
+    signal = from_function(
+        expr, T, t0, name="expression", label=f"f(t) = {expr.source}", discontinuities=jumps
+    )
     return replace(
         signal,
         latex=f"f(t) = {expr.source}",

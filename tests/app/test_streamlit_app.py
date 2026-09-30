@@ -283,6 +283,17 @@ def test_convergence_tab_gibbs_metrics() -> None:
     assert_ok(at)
 
 
+def test_expression_with_jump_has_gibbs_analysis() -> None:
+    at = open_app(TAB_CONVERGENCE)
+    at.selectbox(key="signal_key").select("expression").run()
+    at.text_input(key="expression").input("where(t > 0, 1, -1)").run()
+    at.slider(key="n_terms").set_value(400).run()
+    assert_ok(at)
+    assert not at.error
+    measured = float(metric_value(at, "Ölçülen aşım (yumuşatmasız)").lstrip("%"))
+    assert measured == pytest.approx(8.949, abs=0.01)
+
+
 def test_continuous_signal_has_no_gibbs() -> None:
     at = open_app(TAB_CONVERGENCE)
     at.selectbox(key="signal_key").select("triangle").run()

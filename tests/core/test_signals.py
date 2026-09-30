@@ -3,14 +3,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from fourier_viz.core.analysis import GIBBS_CONSTANT, gibbs_overshoot
+from fourier_viz.core.expression import parse_expression
 from fourier_viz.core.series import partial_sum
 from fourier_viz.core.signals import (
+    MAX_DETECTED_JUMPS,
     SIGNAL_LIBRARY,
     Jump,
     PeriodicSignal,
     SignalError,
     abs_sine,
     build_signal,
+    detect_jumps,
     from_expression,
     from_function,
     full_wave_rectified_sine,
@@ -238,6 +242,72 @@ def test_scale_and_add() -> None:
 
 
 # ---------------------------------------------------------------- custom signals
+class TestJumpDetection:
+    @staticmethod
+    def jumps(text: str) -> tuple[float, ...]:
+        return detect_jumps(parse_expression(text), -np.pi, TWO_PI)
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("where(t > 0, 1, -1)", [0.0]),
+            ("sign(sin(t))", [0.0]),
+            ("floor(t)", [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]),
+            ("t % 1", [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]),
+            ("abs(t) < 1", [-1.0, 1.0]),
+            ("where(t > 0.3, 1e8, 0)", [0.3]),
+        ],
+    )
+    def test_finds_interior_jumps(self, text: str, expected: list[float]) -> None:
+        assert self.jumps(text) == pytest.approx(expected, abs=1e-9)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "t**2",
+            "sin(40*t)",
+            "tanh(50*t)",  # dik ama sürekli
+            "cbrt(t)",  # sonsuz eğimli ama sürekli
+            "sqrt(abs(t))",  # sivri uç
+            "1e7*exp(-1e6*t**2)",  # dar ama sonlu tepe
+            "exp(20*t)",
+        ],
+    )
+    def test_no_false_jumps(self, text: str) -> None:
+        assert self.jumps(text) == ()
+
+    @pytest.mark.parametrize("text", ["1/(t-1)", "1/(t-1)**2", "tan(t)", "(t-0.7)**(-3)"])
+    def test_rejects_singularities(self, text: str) -> None:
+        with pytest.raises(SignalError, match="tekillik"):
+            self.jumps(text)
+        with pytest.raises(SignalError, match="tekillik"):
+            from_expression(text)
+
+    def test_nan_function_rejected(self) -> None:
+        with pytest.raises(SignalError, match="tanımsız"):
+            detect_jumps(np.log, -1.0, 2.0)
+
+    def test_jump_count_is_limited(self) -> None:
+        found = self.jumps("floor(20*t)")
+        assert 0 < len(found) <= MAX_DETECTED_JUMPS
+
+    def test_expression_with_jump_behaves_like_square_wave(self) -> None:
+        sig = from_expression("where(t > 0, 1, -1)")
+        assert sig.discontinuities == pytest.approx((-np.pi, 0.0), abs=1e-9)
+        assert not sig.is_continuous
+        # Dirichlet: sıçramada ortalama değer
+        assert np.allclose(sig(np.array([0.0, np.pi, -np.pi, 1.0])), [0.0, 0.0, 0.0, 1.0])
+        coeffs = sig.coefficients(40)
+        assert coeffs.allclose(square_wave().analytic_coefficients(40), atol=1e-12)
+        ratio = gibbs_overshoot(sig, sig.coefficients(400)).ratio
+        assert ratio == pytest.approx(GIBBS_CONSTANT, abs=2e-4)
+
+    def test_from_function_interior_midpoints(self) -> None:
+        sig = from_function(lambda t: np.where(t < 1.0, 0.0, 4.0), discontinuities=[1.0])
+        assert sig(np.array([1.0]))[0] == pytest.approx(2.0)
+        assert sig.jumps()[1].size == pytest.approx(4.0)
+
+
 class TestCustom:
     def test_wrap_to_period(self) -> None:
         assert np.allclose(
