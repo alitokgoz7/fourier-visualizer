@@ -294,7 +294,7 @@ def _upload_input() -> FloatArray | None:
             return parse_uploaded_shape(uploaded.name, uploaded.getvalue())
         text = pasted.strip()
         if text:
-            looks_svg = text[0] in "MmMm" or "<svg" in text.lower() or "<path" in text.lower()
+            looks_svg = text[0] in "Mm" or "<svg" in text.lower() or "<path" in text.lower()
             return parse_uploaded_shape("pasted.svg" if looks_svg else "pasted.csv", text.encode())
     except PathError as exc:
         show_error(exc, "Şekil okunamadı")
@@ -581,10 +581,18 @@ def _gibbs_section(
         },
     )
     _chart(fig, "gibbs_chart")
-    trend = compute_gibbs_vs_n(
-        spec, settings.series.method, settings.series.samples, settings.series.use_analytic
-    )
-    if trend is not None and settings.series.method != "quad":
+    if settings.series.method == "quad":
+        # N = 500'e kadar adaptif quad ile katsayı hesabı çok yavaş olurdu.
+        st.caption(
+            "SciPy quad yöntemi yavaş olduğundan aşımın N'e bağlı değişimi bu yöntemde "
+            "gösterilmez; başka bir integral yöntemi seçin."
+        )
+        trend = None
+    else:
+        trend = compute_gibbs_vs_n(
+            spec, settings.series.method, settings.series.samples, settings.series.use_analytic
+        )
+    if trend is not None:
         ns, ratios = trend
         _chart(
             plots.gibbs_trend_figure(

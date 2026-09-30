@@ -133,6 +133,13 @@ def test_integration_methods(method: str) -> None:
     assert not at.error
 
 
+def test_quad_method_on_convergence_tab_is_fast_enough() -> None:
+    at = open_app(TAB_CONVERGENCE)
+    at.selectbox(key="method").select("quad").run(timeout=60)
+    assert_ok(at)
+    assert any("quad" in c.value for c in at.caption)
+
+
 def test_quad_method_limits_n() -> None:
     at = open_app(TAB_SERIES)
     at.slider(key="n_terms").set_value(300).run()
