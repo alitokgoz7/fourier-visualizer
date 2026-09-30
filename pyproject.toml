@@ -1,0 +1,120 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fourier-viz"
+version = "0.1.0"
+description = "Eğitici ve interaktif Fourier serisi görselleştirici (Streamlit + Plotly)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ali Tokgöz" }]
+keywords = ["fourier", "epicycles", "education", "streamlit", "signal-processing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Education",
+]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "plotly>=5.20",
+    "matplotlib>=3.8",
+    "streamlit>=1.50",
+    "pillow>=10.0",
+    "imageio-ffmpeg>=0.4.9",
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pandas-stubs>=2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["fourier_viz*"]
+
+[tool.setuptools.package-data]
+fourier_viz = ["py.typed"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "N",        # pep8-naming
+    "SIM",      # simplify
+    "C4",       # comprehensions
+    "NPY",      # numpy
+    "RUF",      # ruff
+    "PT",       # pytest style
+    "D",        # docstrings
+]
+ignore = [
+    "D105",     # magic method docstring
+    "D107",     # __init__ docstring
+    "D203",     # one-blank-line-before-class (D211 ile çakışır)
+    "D213",     # multi-line-summary-second-line (D212 ile çakışır)
+    "RUF001", "RUF002", "RUF003",  # Türkçe/Unicode karakterler (ı, ş, ω, …) bilinçli
+    "N802", "N803", "N806",        # matematiksel adlar (N, T, X_k) bilinçli
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"scripts/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+files = ["fourier_viz", "scripts"]
+
+[[tool.mypy.overrides]]
+module = ["plotly.*", "scipy.*", "imageio_ffmpeg.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: yavaş testler (animasyon/dışa aktarma)",
+    "perf: performans testleri",
+]
+filterwarnings = [
+    "error::RuntimeWarning:fourier_viz.*",
+]
+
+# ---------------------------------------------------------------- coverage
+[tool.coverage.run]
+source = ["fourier_viz"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
