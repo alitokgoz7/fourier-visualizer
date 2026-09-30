@@ -471,8 +471,10 @@ def partial_sums(
 ) -> FloatArray:
     r"""Birden çok :math:`N` için kısmi toplamları tek seferde hesaplar.
 
-    Yumuşatma yoksa :math:`S_N = \sum_{n\le N} h_n` olduğundan harmoniklerin kümülatif
-    toplamı kullanılır (yakınsama animasyonları için :math:`O(N_{max}\cdot|t|)`).
+    Harmonik matrisi :math:`H_{n}(t)` (:func:`harmonic_terms`) bir kez hesaplanır; her
+    :math:`N_i` için ağırlık satırı :math:`W_{i,n} = \sigma_n(N_i)` (:math:`n \le N_i`, aksi
+    hâlde 0) kurulur ve tüm kısmi toplamlar tek bir matris çarpımıyla elde edilir:
+    :math:`S = W H`. Yakınsama animasyonları ve hata çalışmaları için idealdir.
 
     Returns:
         ``(len(n_values), len(t))`` biçiminde dizi.
@@ -481,7 +483,9 @@ def partial_sums(
     ns = [_resolve_terms(coeffs, n) for n in n_values]
     if not ns:
         return np.empty((0, flat.size))
-    if smoothing == "none":
-        cumulative = np.cumsum(harmonic_terms(coeffs, flat, max(ns)), axis=0)
-        return cumulative[ns]
-    return np.stack([partial_sum(coeffs, flat, n, smoothing) for n in ns])
+    n_max = max(ns)
+    weights = np.zeros((len(ns), n_max + 1))
+    for row, n in enumerate(ns):
+        weights[row, : n + 1] = sigma_factors(n, smoothing)
+    result: FloatArray = weights @ harmonic_terms(coeffs, flat, n_max)
+    return result
